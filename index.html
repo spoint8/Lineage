@@ -13,11 +13,11 @@
   }
 
   #login-screen {
-    width: 440px;
+    width: 420px;
     background: linear-gradient(180deg, #1e1a15 0%, #12100d 100%);
     border: 2px solid #7a6342;
     box-shadow: 0 0 35px rgba(0,0,0,0.95), inset 0 0 15px rgba(122, 99, 66, 0.25);
-    padding: 30px 34px;
+    padding: 32px 36px;
     border-radius: 4px;
     text-align: center;
   }
@@ -44,20 +44,14 @@
   .form-group input:focus {
     border-color: #d4af37; box-shadow: 0 0 6px rgba(212, 175, 55, 0.3);
   }
-  .btn-row {
-    display: flex; gap: 10px; margin-top: 20px;
-  }
   .login-btn {
-    flex: 1; padding: 10px; font-size: 14px; font-weight: bold;
+    width: 100%; margin-top: 18px; padding: 11px;
+    font-size: 15px; font-weight: bold; letter-spacing: 2px;
     background: #3b2e1e; color: #f5dfb3; border: 1px solid #9e7f50;
     cursor: pointer; border-radius: 3px; transition: 0.15s;
   }
   .login-btn:hover { background: #524029; border-color: #ffd700; }
   .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .reg-btn {
-    background: #1f2922; color: #b7e4c7; border-color: #4c7c5d;
-  }
-  .reg-btn:hover { background: #2b3a30; border-color: #74c69d; }
 
   #login-msg {
     margin-top: 14px; font-size: 12px; min-height: 18px; line-height: 1.5;
@@ -102,17 +96,14 @@
 
   <div class="form-group">
     <label>遊戲帳號 (Account)</label>
-    <input type="text" id="input-user" placeholder="請輸入帳號 (預設: test1 ~ test3)" autocomplete="off">
+    <input type="text" id="input-user" placeholder="請輸入帳號" autocomplete="off">
   </div>
   <div class="form-group">
     <label>遊戲密碼 (Password)</label>
     <input type="password" id="input-pass" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter') verifyAccount()">
   </div>
 
-  <div class="btn-row">
-    <button class="login-btn" id="btn-login" onclick="verifyAccount()">驗證帳號密碼</button>
-    <button class="login-btn reg-btn" onclick="registerNewAccount()">註冊新帳號</button>
-  </div>
+  <button class="login-btn" id="btn-login" onclick="verifyAccount()">驗證帳號密碼</button>
 
   <div id="login-msg" class="msg-info">請輸入帳號與密碼進行驗證</div>
 
@@ -132,33 +123,13 @@ function setMsg(text, type) {
   el.className = type;
 }
 
-// 讀取專案下的 accounts.json（並合併本機新註冊的測試帳號）
-async function loadAccountsData() {
-  let accounts = {};
-
-  // 1. 讀取同目錄下的 accounts.json（加上時間戳避免瀏覽器快取舊資料）
-  try {
-    const res = await fetch(`./accounts.json?t=${Date.now()}`);
-    if (res.ok) {
-      accounts = await res.json();
-    } else {
-      console.warn("無法讀取 accounts.json，狀態碼:", res.status);
-    }
-  } catch (err) {
-    console.warn("讀取 accounts.json 發生異常（若直接雙擊本機 HTML 可能受 CORS 限制，建議透過 GitHub Pages 或本機伺服器開啟）:", err);
-  }
-
-  // 2. 合併瀏覽器暫存的新註冊帳號（方便未接後端時測試註冊）
-  const localExtra = JSON.parse(localStorage.getItem('lineage_extra_accounts') || '{}');
-  return { ...accounts, ...localExtra };
-}
-
-// 驗證帳號密碼
+// 驗證帳號密碼（直接讀取同目錄下的 accounts.json）
 async function verifyAccount() {
   const username = document.getElementById('input-user').value.trim();
   const password = document.getElementById('input-pass').value.trim();
   const portalBox = document.getElementById('portal-box');
   const enterLink = document.getElementById('enter-game-link');
+  const btnLogin = document.getElementById('btn-login');
 
   // 每次重新驗證先隱藏轉跳連結
   portalBox.style.display = 'none';
@@ -167,49 +138,32 @@ async function verifyAccount() {
     return setMsg("請完整輸入帳號與密碼！", "msg-err");
   }
 
+  btnLogin.disabled = true;
   setMsg("正在讀取 accounts.json 驗證資料...", "msg-info");
-  const accounts = await loadAccountsData();
 
-  if (Object.keys(accounts).length === 0) {
-    return setMsg("讀取 accounts.json 失敗！請確認檔案已上傳至同目錄，或透過網頁伺服器開啟。", "msg-err");
+  try {
+    const res = await fetch(`./accounts.json?t=${Date.now()}`);
+    if (!res.ok) {
+      return setMsg(`無法讀取 accounts.json (狀態碼: ${res.status})，請確認檔案位置。`, "msg-err");
+    }
+
+    const accounts = await res.json();
+
+    // 比對帳號與密碼
+    if (accounts[username] && accounts[username] === password) {
+      sessionStorage.setItem('lineage_logged_user', username);
+      enterLink.href = `${TARGET_GAME_PAGE}?user=${encodeURIComponent(username)}`;
+      portalBox.style.display = 'block';
+      setMsg(`驗證成功！歡迎【${username}】，請點擊下方按鈕進入遊戲。`, "msg-ok");
+    } else {
+      setMsg("帳號或密碼錯誤，無法開放進入！", "msg-err");
+    }
+  } catch (err) {
+    setMsg("讀取 accounts.json 失敗！請透過 GitHub Pages 或本機伺服器開啟網頁。", "msg-err");
+    console.error(err);
+  } finally {
+    btnLogin.disabled = false;
   }
-
-  // 比對帳號與密碼
-  if (accounts[username] && accounts[username] === password) {
-    // 紀錄登入狀態供下一頁讀取
-    sessionStorage.setItem('lineage_logged_user', username);
-
-    // 開放轉跳連結
-    enterLink.href = `${TARGET_GAME_PAGE}?user=${encodeURIComponent(username)}`;
-    portalBox.style.display = 'block';
-    setMsg(`驗證成功！歡迎【${username}】，請點擊下方按鈕進入遊戲。`, "msg-ok");
-  } else {
-    setMsg("帳號或密碼錯誤，無法開放進入！", "msg-err");
-  }
-}
-
-// 註冊新帳號（寫入瀏覽器暫存並提示可更新至 accounts.json）
-async function registerNewAccount() {
-  const username = document.getElementById('input-user').value.trim();
-  const password = document.getElementById('input-pass').value.trim();
-
-  if (!username || !password) {
-    return setMsg("請輸入欲註冊的帳號與密碼！", "msg-err");
-  }
-  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-    return setMsg("帳號僅限使用英文、數字、底線或減號！", "msg-err");
-  }
-
-  const accounts = await loadAccountsData();
-  if (accounts[username]) {
-    return setMsg("註冊失敗：此帳號已存在！", "msg-err");
-  }
-
-  const localExtra = JSON.parse(localStorage.getItem('lineage_extra_accounts') || '{}');
-  localExtra[username] = password;
-  localStorage.setItem('lineage_extra_accounts', JSON.stringify(localExtra));
-
-  setMsg(`新帳號【${username}】註冊成功！現在可直接點擊「驗證帳號密碼」登入。`, "msg-ok");
 }
 </script>
 </body>
